@@ -7,23 +7,11 @@ const {
   ModalBuilder,
   TextInputBuilder,
   TextInputStyle,
-  Events,
-  EmbedBuilder
+  EmbedBuilder,
+  Events
 } = require('discord.js');
 
 const fs = require('fs');
-
-// ================== ตั้งค่า ==================
-const TOKEN = 'MTQ2MzUxNDIwMDY4Mzk3MDY2Mg.GKE7kL.Rn7LtOw7_nQOD8NWATbQP8CMAwjoUEGR4VpuAU';
-const ROLE_ID = '1463516925140144301';
-const CHANNEL_ID = '1463523264356683923';
-// =============================================
-
-// โหลดโค้ด
-let codes = {};
-if (fs.existsSync('./codes.json')) {
-  codes = JSON.parse(fs.readFileSync('./codes.json'));
-}
 
 const client = new Client({
   intents: [
@@ -32,24 +20,39 @@ const client = new Client({
   ]
 });
 
-// บอทออนไลน์
+// ❗ ใช้ TOKEN จาก Railway เท่านั้น
+const TOKEN = process.env.TOKEN;
+
+// ❗ ใส่ ID ของยศ
+const ROLE_ID = 'PUT_ROLE_ID_HERE';
+
+// ❗ ใส่ ID ของห้องที่จะส่งข้อความ
+const CHANNEL_ID = 'PUT_CHANNEL_ID_HERE';
+
+// โหลดโค้ด
+let codes = {};
+if (fs.existsSync('./codes.json')) {
+  codes = JSON.parse(fs.readFileSync('./codes.json'));
+}
+
 client.once(Events.ClientReady, async () => {
   console.log(`✅ Logged in as ${client.user.tag}`);
 
+  // ส่งข้อความ + รูป + ปุ่ม
   const channel = await client.channels.fetch(CHANNEL_ID);
 
   const embed = new EmbedBuilder()
-    .setTitle('🎟️ รับยศด้วยโค้ด')
-    .setDescription('กดปุ่มด้านล่างเพื่อใส่โค้ด\n\n1 โค้ด ใช้ได้ 1 คน')
-    .setImage('https://mcdn.wallpapersafari.com/medium/28/48/pRYN4t.jpg')
-    .setColor(0x2ecc71);
+    .setTitle('🎁 รับยศด้วยโค้ด')
+    .setDescription('กดปุ่มด้านล่างเพื่อกรอกโค้ดรับยศ')
+    .setImage('https://i.imgur.com/yourimage.png') // ใส่ลิงก์รูป
+    .setColor(0x00ff00);
 
-  const button = new ButtonBuilder()
-    .setCustomId('openRedeem')
-    .setLabel('กดเพื่อใส่โค้ด')
-    .setStyle(ButtonStyle.Success);
-
-  const row = new ActionRowBuilder().addComponents(button);
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('open_redeem')
+      .setLabel('รับยศ')
+      .setStyle(ButtonStyle.Success)
+  );
 
   await channel.send({
     embeds: [embed],
@@ -57,68 +60,48 @@ client.once(Events.ClientReady, async () => {
   });
 });
 
-// รับ interaction
+// จัดการ interaction
 client.on(Events.InteractionCreate, async interaction => {
 
   // กดปุ่ม
-  if (interaction.isButton()) {
-    if (interaction.customId === 'openRedeem') {
+  if (interaction.isButton() && interaction.customId === 'open_redeem') {
+    const modal = new ModalBuilder()
+      .setCustomId('redeem_modal')
+      .setTitle('กรอกโค้ดรับยศ');
 
-      const modal = new ModalBuilder()
-        .setCustomId('redeemModal')
-        .setTitle('ใส่โค้ดรับยศ');
+    const codeInput = new TextInputBuilder()
+      .setCustomId('code')
+      .setLabel('ใส่โค้ด')
+      .setStyle(TextInputStyle.Short)
+      .setRequired(true);
 
-      const codeInput = new TextInputBuilder()
-        .setCustomId('code')
-        .setLabel('กรอกโค้ด')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(codeInput)
+    );
 
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(codeInput)
-      );
-
-      return interaction.showModal(modal);
-    }
+    await interaction.showModal(modal);
   }
 
-  // กดยืนยันโค้ด
-  if (interaction.isModalSubmit()) {
-    if (interaction.customId === 'redeemModal') {
+  // ส่งโค้ด
+  if (interaction.isModalSubmit() && interaction.customId === 'redeem_modal') {
+    const inputCode = interaction.fields.getTextInputValue('code');
 
-      const inputCode = interaction.fields.getTextInputValue('code');
-
-      if (!codes[inputCode]) {
-        return interaction.reply({
-          content: '❌ โค้ดนี้ไม่ถูกต้อง',
-          ephemeral: true
-        });
-      }
-
-      if (codes[inputCode].used) {
-        return interaction.reply({
-          content: '❌ โค้ดนี้ถูกใช้ไปแล้ว',
-          ephemeral: true
-        });
-      }
-
-      const member = await interaction.guild.members.fetch(interaction.user.id);
-      await member.roles.add(ROLE_ID);
-
-      codes[inputCode].used = true;
-      fs.writeFileSync('./codes.json', JSON.stringify(codes, null, 2));
-
-      return interaction.reply({
-        content: '✅ รับยศเรียบร้อย!',
-        ephemeral: true
-      });
+    if (!codes[inputCode]) {
+      return interaction.reply({ content: '❌ โค้ดไม่ถูกต้อง', ephemeral: true });
     }
-  }
-});
 
-// กัน error เงียบ
-process.on('unhandledRejection', error => {
-  console.error('❌ Error:', error);
+    if (codes[inputCode].used) {
+      return interaction.reply({ content: '❌ โค้ดนี้ถูกใช้ไปแล้ว', ephemeral: true });
+    }
+
+    const member = await interaction.guild.members.fetch(interaction.user.id);
+    await member.roles.add(ROLE_ID);
+
+    codes[inputCode].used = true;
+    fs.writeFileSync('./codes.json', JSON.stringify(codes, null, 2));
+
+    await interaction.reply({ content: '✅ รับยศเรียบร้อย!', ephemeral: true });
+  }
 });
 
 client.login(TOKEN);
